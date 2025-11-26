@@ -346,7 +346,7 @@ static void alarm_callback(OSAlarm* alarm, OSContext* ctx)
   wiiu_input_update();
 }
 
-static int input_thread_proc()
+static int input_thread_proc(int argc, const char **argv)
 {
   OSCreateAlarm(&inputAlarm);
   OSSetPeriodicAlarm(&inputAlarm, 0, INPUT_UPDATE_RATE, alarm_callback);

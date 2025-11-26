@@ -11,7 +11,7 @@
 
 static OSThread memoryThread;
 
-static int wiiu_net_memory_thread()
+static int wiiu_net_memory_thread(int argc, const char **argv)
 {
   // This provides a bunch of memory to the net stack,
   // which we can use for buffering the videostream socket
