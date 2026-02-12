@@ -1,6 +1,8 @@
 #include "wiiu.h"
 
 #include <malloc.h>
+#include <string.h>
+#include <Limelight.h>
 
 #include <vpad/input.h>
 #include <padscore/kpad.h>
@@ -35,6 +37,23 @@ static OSAlarm inputAlarm;
 // ~60 Hz
 #define INPUT_UPDATE_RATE OSMillisecondsToTicks(16)
 
+// DS4 HID Report Structure for Official Passthrough
+#pragma pack(push, 1)
+typedef struct {
+    uint8_t reportId;       // 0x01
+    uint8_t leftStickX, leftStickY;
+    uint8_t rightStickX, rightStickY;
+    uint16_t buttons;
+    uint8_t dummy;          // T-Pad click etc
+    uint8_t leftTrigger, rightTrigger;
+    uint16_t timestamp;
+    uint8_t battery;
+    int16_t gyroX, gyroY, gyroZ;
+    int16_t accelX, accelY, accelZ;
+    uint8_t padding[39];
+} DS4_HID_REPORT;
+#pragma pack(pop)
+
 void handleTouch(VPADTouchData touch) {
   if (absolute_positioning) {
     if (touch.touched) {
@@ -51,18 +70,14 @@ void handleTouch(VPADTouchData touch) {
     }
   }
   else {
-    // Just pressed (run this twice to allow touch position to settle)
     if (lastTouched < 2 && touch.touched) {
       touchDownMillis = millis();
       last_x = touch.x;
       last_y = touch.y;
-
       lastTouched++;
-      return; // We can't do much until we wait for a few hundred milliseconds
-              // since we don't know if it's a tap, a tap-and-hold, or a drag
+      return;
     }
 
-    // Just released
     if (lastTouched && !touch.touched) {
       if (millis() - touchDownMillis < TAP_MILLIS) {
         LiSendMouseButtonEvent(BUTTON_ACTION_PRESS, BUTTON_LEFT);
@@ -71,9 +86,8 @@ void handleTouch(VPADTouchData touch) {
     }
 
     if (touch.touched) {
-      // Holding & dragging screen, not just tapping
       if (millis() - touchDownMillis > TAP_MILLIS || touchDownMillis == 0) {
-        if (touch.x != last_x || touch.y != last_y) // Don't send extra data if we don't need to
+        if (touch.x != last_x || touch.y != last_y)
           LiSendMouseMoveEvent(touch.x - last_x, touch.y - last_y);
         last_x = touch.x;
         last_y = touch.y;
@@ -87,20 +101,17 @@ void handleTouch(VPADTouchData touch) {
         if (diff_x + diff_y > DRAG_DISTANCE) touchDownMillis = 0;
       }
     }
-
-    lastTouched = touch.touched ? lastTouched : 0; // Keep value unless released
+    lastTouched = touch.touched ? lastTouched : 0;
   }
 }
 
-void wiiu_input_init(void)
-{
-	KPADInit();
-	WPADEnableURCC(1);
+void wiiu_input_init(void) {
+  KPADInit();
+  WPADEnableURCC(1);
 }
 
 void wiiu_input_update(void) {
   static uint64_t home_pressed[4] = {0};
-
   short controllerNumber = 0;
   short gamepad_mask = 0;
 
@@ -110,21 +121,22 @@ void wiiu_input_update(void) {
   VPADStatus vpad;
   VPADReadError err;
   VPADRead(VPAD_CHAN_0, &vpad, 1, &err);
+
   if (err == VPAD_READ_SUCCESS && !disable_gamepad) {
     uint32_t btns = vpad.hold;
     short buttonFlags = 0;
+
 #define CHECKBTN(v, f) if (btns & v) buttonFlags |= f;
     if (swap_buttons) {
-      CHECKBTN(VPAD_BUTTON_A,       B_FLAG);
-      CHECKBTN(VPAD_BUTTON_B,       A_FLAG);
-      CHECKBTN(VPAD_BUTTON_X,       Y_FLAG);
-      CHECKBTN(VPAD_BUTTON_Y,       X_FLAG);
-    }
-    else {
-      CHECKBTN(VPAD_BUTTON_A,       A_FLAG);
-      CHECKBTN(VPAD_BUTTON_B,       B_FLAG);
-      CHECKBTN(VPAD_BUTTON_X,       X_FLAG);
-      CHECKBTN(VPAD_BUTTON_Y,       Y_FLAG);
+      CHECKBTN(VPAD_BUTTON_A, B_FLAG);
+      CHECKBTN(VPAD_BUTTON_B, A_FLAG);
+      CHECKBTN(VPAD_BUTTON_X, Y_FLAG);
+      CHECKBTN(VPAD_BUTTON_Y, X_FLAG);
+    } else {
+      CHECKBTN(VPAD_BUTTON_A, A_FLAG);
+      CHECKBTN(VPAD_BUTTON_B, B_FLAG);
+      CHECKBTN(VPAD_BUTTON_X, X_FLAG);
+      CHECKBTN(VPAD_BUTTON_Y, Y_FLAG);
     }
     CHECKBTN(VPAD_BUTTON_UP,      UP_FLAG);
     CHECKBTN(VPAD_BUTTON_DOWN,    DOWN_FLAG);
@@ -139,13 +151,40 @@ void wiiu_input_update(void) {
     CHECKBTN(VPAD_BUTTON_HOME,    SPECIAL_FLAG);
 #undef CHECKBTN
 
-    // If the button was just pressed, reset to current time
     if (vpad.trigger & VPAD_BUTTON_HOME) home_pressed[controllerNumber] = millis();
-
     if (btns & VPAD_BUTTON_HOME && millis() - home_pressed[controllerNumber] > 3000) {
       state = STATE_STOP_STREAM;
       return;
     }
+
+    // Official HID Motion Report Generation
+    DS4_HID_REPORT report;
+    memset(&report, 0, sizeof(report));
+    report.reportId = 0x01;
+
+    // Scale factors: Accel (~8192/G), Gyro (~16.4 per deg/s)
+    const float RAD_TO_DEG = 57.2957795f;
+    const float G_TO_MS2 = 9.80665f;
+
+
+    // Sensitivity multiplier - increase this if it's still too slow (e.g., 2.0f or 3.0f)
+    const float SENSITIVITY_BOOST = 2.5f;
+
+    // Accelerometer data (m/s^2)
+    // Wii U reports in Gs, so we multiply by 9.80665
+    /*LiSendControllerMotionEvent(controllerNumber, LI_MOTION_TYPE_ACCEL,
+                                vpad.accelorometer.acc.x * G_TO_MS2,
+                                vpad.accelorometer.acc.y * G_TO_MS2,
+                                vpad.accelorometer.acc.z * G_TO_MS2);*/
+
+    // Gyroscope data (deg/s)
+    // Wii U reports in Rad/s, so we multiply by RAD_TO_DEG
+    // Added '-' to vpad.gyro.x to fix Left/Right inversion
+    // Multiplied by SENSITIVITY_BOOST to fix low sensitivity
+    LiSendControllerMotionEvent(controllerNumber, LI_MOTION_TYPE_GYRO,
+                                -(vpad.gyro.x * RAD_TO_DEG * SENSITIVITY_BOOST),
+                                (vpad.gyro.y * RAD_TO_DEG * SENSITIVITY_BOOST),
+                                (vpad.gyro.z * RAD_TO_DEG * SENSITIVITY_BOOST));
 
     LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
       (vpad.hold & VPAD_BUTTON_ZL) ? 0xFF : 0,
@@ -158,11 +197,12 @@ void wiiu_input_update(void) {
     handleTouch(touch);
   }
 
+  // ... (KPAD polling for other controllers remains the same)
   KPADStatus kpad_data = {0};
-	int32_t kpad_err = -1;
-	for (int i = 0; i < 4; i++) {
-		KPADReadEx((KPADChan) i, &kpad_data, 1, &kpad_err);
-		if (kpad_err == KPAD_ERROR_OK && controllerNumber < 4) {
+  int32_t kpad_err = -1;
+  for (int i = 0; i < 4; i++) {
+   KPADReadEx((KPADChan) i, &kpad_data, 1, &kpad_err);
+   if (kpad_err == KPAD_ERROR_OK && controllerNumber < 4) {
       if (kpad_data.extensionType == WPAD_EXT_PRO_CONTROLLER) {
         uint32_t btns = kpad_data.pro.hold;
         short buttonFlags = 0;
@@ -192,7 +232,6 @@ void wiiu_input_update(void) {
         CHECKBTN(WPAD_PRO_BUTTON_HOME,    SPECIAL_FLAG);
 #undef CHECKBTN
 
-        // If the button was just pressed, reset to current time
         if (kpad_data.pro.trigger & WPAD_PRO_BUTTON_HOME)
           home_pressed[controllerNumber] = millis();
 
@@ -229,15 +268,11 @@ void wiiu_input_update(void) {
         CHECKBTN(WPAD_CLASSIC_BUTTON_RIGHT,   RIGHT_FLAG);
         CHECKBTN(WPAD_CLASSIC_BUTTON_L,       LB_FLAG);
         CHECKBTN(WPAD_CLASSIC_BUTTON_R,       RB_FLAG);
-        // don't have stick buttons on a classic controller
-        // CHECKBTN(WPAD_CLASSIC_BUTTON_STICK_L, LS_CLK_FLAG);
-        // CHECKBTN(WPAD_CLASSIC_BUTTON_STICK_R, RS_CLK_FLAG);
         CHECKBTN(WPAD_CLASSIC_BUTTON_PLUS,    PLAY_FLAG);
         CHECKBTN(WPAD_CLASSIC_BUTTON_MINUS,   BACK_FLAG);
         CHECKBTN(WPAD_CLASSIC_BUTTON_HOME,    SPECIAL_FLAG);
 #undef CHECKBTN
 
-        // If the button was just pressed, reset to current time
         if (kpad_data.classic.trigger & WPAD_CLASSIC_BUTTON_HOME)
           home_pressed[controllerNumber] = millis();
 

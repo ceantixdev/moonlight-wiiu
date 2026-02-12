@@ -111,7 +111,10 @@ static int stream(GS_CLIENT client, PSERVER_DATA server, PCONFIGURATION config) 
     printf("Stream %d x %d, %d fps, %d kbps\n", config->stream.width, config->stream.height, config->stream.fps, config->stream.bitrate);
   }
 
-  if (LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks, &decoder_callbacks_wiiu, &audio_callbacks_wiiu, NULL, 0, config->audio_device, 0) != 0) {
+  // Use LI_CTYPE_PS instead of SDL_CONTROLLER_TYPE_PS4
+  if (LiStartConnection(&server->serverInfo, &config->stream, &connection_callbacks,
+                        &decoder_callbacks_wiiu, &audio_callbacks_wiiu, NULL, 0,
+                        config->audio_device, LI_CTYPE_PS) != 0) {
     fprintf(stderr, "Failed to start connection\n");
     sprintf(message_buffer, "Failed to start connection\n");
     is_error = 1;

@@ -28,24 +28,24 @@ include $(DEVKITPRO)/wut/share/wut_rules
 #-------------------------------------------------------------------------------
 TARGET		:=	moonlight
 BUILD		:=	build
-SOURCES		:=	src \
-				src/wiiu \
-				libgamestream \
-				third_party/moonlight-common-c/src \
-				third_party/moonlight-common-c/reedsolomon \
-				third_party/moonlight-common-c/enet \
-				third_party/h264bitstream \
-				third_party/libuuid \
-				third_party/uuidstr
+SOURCES    := src \
+             src/wiiu \
+             libgamestream \
+             third_party/moonlight-common-c/src \
+             third_party/moonlight-common-c/reedsolomon \
+             third_party/moonlight-common-c/enet \
+             third_party/h264bitstream \
+             third_party/libuuid \
+             third_party/uuidstr
 DATA		:=	data
-INCLUDES	:=	src/wiiu \
-				libgamestream \
-				third_party/moonlight-common-c/src \
-				third_party/moonlight-common-c/reedsolomon \
-				third_party/moonlight-common-c/enet/include \
-				third_party/h264bitstream \
-				third_party/libuuid \
-				third_party/uuidstr
+INCLUDES    := src/wiiu \
+             libgamestream \
+             third_party/moonlight-common-c/src \
+             third_party/moonlight-common-c/reedsolomon \
+             third_party/moonlight-common-c/enet/include \
+             third_party/h264bitstream \
+             third_party/libuuid \
+             third_party/uuidstr
 SOURCE_FILES	:=	
 CONTENT		:=
 ICON		:=	res/iconTex.png
