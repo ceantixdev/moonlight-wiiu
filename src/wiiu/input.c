@@ -15,7 +15,7 @@
 
 int disable_gamepad = 0;
 int swap_buttons = 0;
-int absolute_positioning = 0;
+int absolute_positioning = 1;
 
 static char lastTouched = 0;
 static char touched = 0;
@@ -177,7 +177,8 @@ void wiiu_input_update(void) {
 
 
     // Sensitivity multiplier - increase this if it's still too slow (e.g., 2.0f or 3.0f)
-    const float SENSITIVITY_BOOST = 2.5f;
+    const float SENSITIVITY_BOOST = 3.5f;
+    const float SENSITIVITY_BOOST_EXTRA = 1.5f;
 
     // Accelerometer data (m/s^2)
     // Wii U reports in Gs, so we multiply by 9.80665
@@ -192,7 +193,7 @@ void wiiu_input_update(void) {
     // Multiplied by SENSITIVITY_BOOST to fix low sensitivity
     LiSendControllerMotionEvent(controllerNumber, LI_MOTION_TYPE_GYRO,
                                 -(vpad.gyro.x * RAD_TO_DEG * SENSITIVITY_BOOST),
-                                (vpad.gyro.y * RAD_TO_DEG * SENSITIVITY_BOOST),
+                                (vpad.gyro.y * RAD_TO_DEG * SENSITIVITY_BOOST * SENSITIVITY_BOOST_EXTRA),
                                 (vpad.gyro.z * RAD_TO_DEG * SENSITIVITY_BOOST));
 
     LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
