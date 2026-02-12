@@ -112,6 +112,7 @@ void wiiu_input_init(void) {
 
 void wiiu_input_update(void) {
   static uint64_t home_pressed[4] = {0};
+  static bool gamepad_arrived = false;
   short controllerNumber = 0;
   short gamepad_mask = 0;
 
@@ -123,6 +124,14 @@ void wiiu_input_update(void) {
   VPADRead(VPAD_CHAN_0, &vpad, 1, &err);
 
   if (err == VPAD_READ_SUCCESS && !disable_gamepad) {
+    if (!gamepad_arrived) {
+      LiSendControllerArrivalEvent(0,
+                                   gamepad_mask,
+                                   LI_CTYPE_PS,
+                                   0x1FFFFF,
+                                   LI_CCAP_RUMBLE | LI_CCAP_GYRO | LI_CCAP_ANALOG_TRIGGERS); // Added Triggers
+      gamepad_arrived = true;
+    }
     uint32_t btns = vpad.hold;
     short buttonFlags = 0;
 
@@ -286,6 +295,26 @@ void wiiu_input_update(void) {
           (kpad_data.classic.hold & WPAD_CLASSIC_BUTTON_ZR) ? 0xFF : 0x00,
           kpad_data.classic.leftStick.x * INT16_MAX, kpad_data.classic.leftStick.y * INT16_MAX,
           kpad_data.classic.rightStick.x * INT16_MAX, kpad_data.classic.rightStick.y * INT16_MAX);
+      }
+    }
+  }
+}
+
+void wiiu_rumble_handler(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor) {
+  static uint64_t last_rumble_time = 0;
+
+  if (controllerNumber == 0) {
+    // We check if either motor is active.
+    // We use a lower threshold to catch subtle vibrations and turn them into full rumbles.
+    if (lowFreqMotor > 1000 || highFreqMotor > 1000) {
+      uint8_t max_power[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+      VPADControlMotor(VPAD_CHAN_0, max_power, 32);
+      last_rumble_time = LiGetMillis();
+    } else {
+      // Sustain logic: Keep rumbling for 50ms after the last "on" command
+      // to prevent the motor from losing momentum during packet jitter.
+      if (LiGetMillis() - last_rumble_time > 50) {
+        VPADStopMotor(VPAD_CHAN_0);
       }
     }
   }

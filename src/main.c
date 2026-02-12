@@ -43,6 +43,8 @@
 #include <whb/gfx.h>
 #include <vpad/input.h>
 
+void wiiu_rumble_handler(unsigned short controllerNumber, unsigned short lowFreqMotor, unsigned short highFreqMotor);
+
 #ifdef DEBUG
 void Debug_Init();
 #endif
@@ -140,6 +142,9 @@ int main(int argc, char* argv[]) {
   wiiu_net_init();
 
   wiiu_input_init();
+
+  extern ConnListenerRumble rumble_handler;
+  rumble_handler = wiiu_rumble_handler;
 
   Font_Init();
 
