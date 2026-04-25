@@ -180,21 +180,32 @@ void wiiu_input_update(void) {
     const float SENSITIVITY_BOOST = 3.5f;
     const float SENSITIVITY_BOOST_EXTRA = 1.5f;
 
+    // Calculate raw gyro values
+    float gyro_x = -(vpad.gyro.x * RAD_TO_DEG * SENSITIVITY_BOOST);
+    float gyro_y = (vpad.gyro.y * RAD_TO_DEG * SENSITIVITY_BOOST* SENSITIVITY_BOOST_EXTRA);
+    float gyro_z = (vpad.gyro.z * RAD_TO_DEG * SENSITIVITY_BOOST);
+
+    // Calculate real accelerometer values
+    float accel_x = (vpad.accelorometer.acc.x * G_TO_MS2 * SENSITIVITY_BOOST);
+    float accel_y = -(vpad.accelorometer.acc.y * G_TO_MS2);// * SENSITIVITY_BOOST);
+    float accel_z = (vpad.accelorometer.acc.z * G_TO_MS2 * SENSITIVITY_BOOST);
+
+    // Hardware noise deadzone for gyro
+    //if (gyro_x > -5.0f && gyro_x < 5.0f) gyro_x = 0.0f;
+    //if (gyro_y > -5.0f && gyro_y < 5.0f) gyro_y = 0.0f;
+    //if (gyro_z > -5.0f && gyro_z < 5.0f) gyro_z = 0.0f;
+
     // Accelerometer data (m/s^2)
     // Wii U reports in Gs, so we multiply by 9.80665
-    /*LiSendControllerMotionEvent(controllerNumber, LI_MOTION_TYPE_ACCEL,
-                                vpad.accelorometer.acc.x * G_TO_MS2,
-                                vpad.accelorometer.acc.y * G_TO_MS2,
-                                vpad.accelorometer.acc.z * G_TO_MS2);*/
+    LiSendControllerMotionEvent(controllerNumber, LI_MOTION_TYPE_ACCEL,
+                               accel_x, accel_y, accel_z);
 
     // Gyroscope data (deg/s)
     // Wii U reports in Rad/s, so we multiply by RAD_TO_DEG
     // Added '-' to vpad.gyro.x to fix Left/Right inversion
     // Multiplied by SENSITIVITY_BOOST to fix low sensitivity
     LiSendControllerMotionEvent(controllerNumber, LI_MOTION_TYPE_GYRO,
-                                -(vpad.gyro.x * RAD_TO_DEG * SENSITIVITY_BOOST),
-                                (vpad.gyro.y * RAD_TO_DEG * SENSITIVITY_BOOST * SENSITIVITY_BOOST_EXTRA),
-                                (vpad.gyro.z * RAD_TO_DEG * SENSITIVITY_BOOST));
+                                gyro_x, gyro_y, gyro_z);
 
     LiSendMultiControllerEvent(controllerNumber++, gamepad_mask, buttonFlags,
       (vpad.hold & VPAD_BUTTON_ZL) ? 0xFF : 0,
@@ -312,9 +323,9 @@ void wiiu_rumble_handler(unsigned short controllerNumber, unsigned short lowFreq
       VPADControlMotor(VPAD_CHAN_0, max_power, 32);
       last_rumble_time = LiGetMillis();
     } else {
-      // Sustain logic: Keep rumbling for 50ms after the last "on" command
+      // Sustain logic: Keep rumbling for 25ms after the last "on" command
       // to prevent the motor from losing momentum during packet jitter.
-      if (LiGetMillis() - last_rumble_time > 50) {
+      if (LiGetMillis() - last_rumble_time > 25) {
         VPADStopMotor(VPAD_CHAN_0);
       }
     }
