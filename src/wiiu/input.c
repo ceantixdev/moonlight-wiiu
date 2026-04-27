@@ -182,12 +182,12 @@ void wiiu_input_update(void) {
 
     // Calculate raw gyro values
     float gyro_x = -(vpad.gyro.x * RAD_TO_DEG * SENSITIVITY_BOOST);
-    float gyro_y = (vpad.gyro.y * RAD_TO_DEG * SENSITIVITY_BOOST* SENSITIVITY_BOOST_EXTRA);
+    float gyro_y = (vpad.gyro.y * RAD_TO_DEG * SENSITIVITY_BOOST * SENSITIVITY_BOOST_EXTRA);
     float gyro_z = (vpad.gyro.z * RAD_TO_DEG * SENSITIVITY_BOOST);
 
     // Calculate real accelerometer values
     float accel_x = (vpad.accelorometer.acc.x * G_TO_MS2 * SENSITIVITY_BOOST);
-    float accel_y = -(vpad.accelorometer.acc.y * G_TO_MS2);// * SENSITIVITY_BOOST);
+    float accel_y = -(vpad.accelorometer.acc.y * G_TO_MS2 * SENSITIVITY_BOOST);
     float accel_z = (vpad.accelorometer.acc.z * G_TO_MS2 * SENSITIVITY_BOOST);
 
     // Hardware noise deadzone for gyro
